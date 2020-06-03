@@ -18,7 +18,7 @@ class Server:
             data, addr = self.socket.recvfrom(512)
             request = read_packet(data)
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
-                cache.clear()
+                cache.delete()
                 answers = []
                 authority = []
                 additional = []
@@ -26,7 +26,7 @@ class Server:
                     cached_rr = cache.find(question.qname, question.qtype, question.qclass)
                     if cached_rr is None:
                         header = Header(questions_count=1, rd=1)
-                        dns_request = DNSPacket(header, [question])
+                        dns_request = Packet(header, [question])
                         try:
                             server_socket.sendto(dns_request.to_bytes(), (forwarder, 53))
                             answer = server_socket.recvfrom(512)[0]
@@ -48,6 +48,7 @@ class Server:
                 my_answer = new_response(request.header.id, request.questions, answers)
                 self.socket.sendto(my_answer.to_bytes(), addr)
                 cache.save()
+                print("Record: {" + str(answer) + "} has been sent!")
 
 
 class Header:
@@ -74,20 +75,20 @@ class Header:
                + str(self.qdcount) + ' ' + str(self.ancount) + ' ' + str(self.nscount) + ' ' + str(self.arcount)
 
     def to_bytes(self):
-        result = b''
-        result += struct.pack('!H', self.id)
-        result += struct.pack('!B', self.qr << 7 | self.opcode << 3 | self.aa << 2 | self.tc << 1 | self.rd)
-        result += struct.pack('!B', self.ra << 7 | self.z << 3 | self.rcode)
-        result += struct.pack('!HHHH', self.qdcount, self.ancount, self.nscount, self.arcount)
-        return result
+        res = b''
+        res += struct.pack('!H', self.id)
+        res += struct.pack('!B', self.qr << 7 | self.opcode << 3 | self.aa << 2 | self.tc << 1 | self.rd)
+        res += struct.pack('!B', self.ra << 7 | self.z << 3 | self.rcode)
+        res += struct.pack('!HHHH', self.qdcount, self.ancount, self.nscount, self.arcount)
+        return res
 
     def from_bytes(self, data, start_index):
         fields = struct.unpack('!HBBHHHH', data[start_index:struct.calcsize('!HBBHHHH')])
         self.id = fields[0]
-        self.qr = fields[1] >> 7 & 0x1  # qr
-        self.opcode = fields[1] >> 3 & 0b1111  # opcode
-        self.aa = fields[1] >> 2 & 0x1  # aa
-        self.tc = fields[1] >> 1 & 0x1  # tc
+        self.qr = fields[1] >> 7 & 0x1
+        self.opcode = fields[1] >> 3 & 0b1111
+        self.aa = fields[1] >> 2 & 0x1
+        self.tc = fields[1] >> 1 & 0x1
         self.rd = fields[1] & 0x1  # rd
         self.ra = fields[2] >> 7 & 0x1
         self.z = fields[2] >> 3 & 0x7
@@ -123,7 +124,7 @@ class Header:
         self.arcount = int(dict['arcount'])
 
 
-def _name_to_bytes(name):
+def name_to_bytes(name):
     name_parts = name.split('.')
     chars_lists = ([char for char in part] for part in name_parts)
     result = b''
@@ -136,14 +137,14 @@ def _name_to_bytes(name):
     return result
 
 
-def _name_from_bytes(data, index=0):
+def name_from_bytes(data, index=0):
     domain_name = []
     count = data[index]
     while count != 0:
         if count >= 192:
             index += 1
             hop = (count << 2 & 0b111111) + data[index]
-            name, _ = _name_from_bytes(data, hop)
+            name, _ = name_from_bytes(data, hop)
             domain_name.append(name)
             return '.'.join(domain_name), index + 1
         else:
@@ -156,7 +157,7 @@ def _name_from_bytes(data, index=0):
     return '.'.join(domain_name), index + 1
 
 
-def _rdata_from_bytes(data, start_index, end_index, a_type):
+def rdata_from_bytes(data, start_index, end_index, a_type):
     if a_type ==1:
         data = data[start_index:end_index]
         return '{0}.{1}.{2}.{3}'.format(data[0], data[1], data[2], data[3])
@@ -164,11 +165,11 @@ def _rdata_from_bytes(data, start_index, end_index, a_type):
         data = data[start_index:end_index]
         return data
     else:
-        name, _ = _name_from_bytes(data, start_index)
+        name, _ = name_from_bytes(data, start_index)
         return name
 
 
-def _rdata_to_bytes(rdata, a_type):
+def rdata_to_bytes(rdata, a_type):
     if rdata == '':
         return b''
     if a_type == 1:
@@ -180,7 +181,7 @@ def _rdata_to_bytes(rdata, a_type):
         except:
             return rdata.replace('b', '').replace('\'', '').encode()
     else:
-        return _name_to_bytes(rdata)
+        return name_to_bytes(rdata)
 
 
 class Question:
@@ -193,13 +194,13 @@ class Question:
         return self.qname + ' ' + str(self.qtype) + ' ' + str(self.qclass)
 
     def to_bytes(self):
-        result = b''
-        result += _name_to_bytes(self.qname)
-        result += struct.pack('!hh', self.qtype, self.qclass)
-        return result
+        res = b''
+        res += name_to_bytes(self.qname)
+        res += struct.pack('!hh', self.qtype, self.qclass)
+        return res
 
     def from_bytes(self, data, start_index):
-        self.qname, offset = _name_from_bytes(data, start_index)
+        self.qname, offset = name_from_bytes(data, start_index)
         ndt = data[offset:offset + 4]
         fields = struct.unpack('!hh', ndt)
         self.qtype = fields[0]
@@ -242,17 +243,17 @@ class ResourceRecord:
 
     def to_bytes(self):
         res = b''
-        res += _name_to_bytes(self.name)
+        res += name_to_bytes(self.name)
         res += struct.pack('!H', self.type)
         res += struct.pack('!H', self.rr_class)
         res += struct.pack('!I', self.ttl)
-        rdata = _rdata_to_bytes(self.rdata, self.type)
+        rdata = rdata_to_bytes(self.rdata, self.type)
         res += struct.pack('!H', len(rdata))
         res += rdata
         return res
 
     def from_bytes(self, data, start_index):
-        self.name, offset = _name_from_bytes(data, start_index)
+        self.name, offset = name_from_bytes(data, start_index)
         l = struct.calcsize('!HHIH')
         nd = data[offset:offset + l]
         fields = struct.unpack('!HHIH', nd)
@@ -260,7 +261,7 @@ class ResourceRecord:
         self.rr_class = fields[1]
         self.ttl = fields[2]
         self.rdlength = fields[3]
-        self.rdata = _rdata_from_bytes(data, offset + l, offset + l + self.rdlength, self.type)
+        self.rdata = rdata_from_bytes(data, offset + l, offset + l + self.rdlength, self.type)
         return offset + l + self.rdlength
 
     def to_dict(self):
@@ -289,7 +290,7 @@ class ResourceRecord:
         self.from_dict(dictionary)
 
 
-class DNSPacket:
+class Packet:
     def __init__(self, header=Header(), questions=None,
                  answer_rrs=None, authority_rrs=None, additional_rrs=None):
         self.header = header
@@ -391,7 +392,7 @@ def read_packet(data):
         add, offset = read_rr(data, offset)
         additional.append(add)
 
-    dns_packet = DNSPacket(header, questions, answer, authority, additional)
+    dns_packet = Packet(header, questions, answer, authority, additional)
     return dns_packet
 
 
@@ -399,9 +400,9 @@ def new_response(id, questions, answers):
     header = Header(id=id, qr=1,
                     questions_count=len(questions),
                     ancount=len([answer for answer in answers if answer.rdata != '']))
-    response_packet = DNSPacket(header=header,
-                                questions=questions,
-                                answer_rrs=answers)
+    response_packet = Packet(header=header,
+                             questions=questions,
+                             answer_rrs=answers)
     return response_packet
 
 
@@ -418,6 +419,7 @@ class Cache:
                 'class': answer.rr_class,
                 'rdata': answer.rdata
             }))
+            print(answer.name + '' + answer.rr_class)
         else:
             self.storage[key_for_answer] = [json.dumps({
                 'deadline': time() + answer.ttl,
@@ -425,6 +427,7 @@ class Cache:
                 'class': answer.rr_class,
                 'rdata': answer.rdata
             })]
+            print(answer.name + '' + answer.rr_class)
 
     def find(self, name, rr_type, rr_class):
         key = json.dumps([name, rr_type, rr_class])
@@ -447,7 +450,6 @@ class Cache:
     def save(self):
         with open('Cache.json', 'w') as f:
             json.dump(self.storage, f)
-            print('New records have been made!')
 
     def load(self):
         if not os.path.exists('cache.json'):
@@ -459,14 +461,14 @@ class Cache:
             self.storage = json.load(f)
             print('Cache has been loaded!')
 
-    def clear(self):
+    def delete(self):
         for key in self.storage:
             rrs = self.storage[key]
             for rr in rrs:
                 loaded = json.loads(rr)
                 if int(loaded['deadline']) < time():
                     rrs.remove(rr)
-                    print('Record has been deleted')
+                    print('Record: ' + str(loaded) + 'has been deleted!')
         self.storage = {
             k: v for k, v in self.storage.items() if len(v) != 0
         }
