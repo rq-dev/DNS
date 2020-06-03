@@ -3,17 +3,6 @@ import struct
 import json
 import os
 from time import time
-from enum import Enum
-
-
-class RecordTypes(Enum):
-    NS = 2
-    AAAA = 28
-    A = 1
-
-
-class RecordClasses(Enum):
-    IN = 1
 
 
 class Server:
@@ -168,10 +157,10 @@ def _name_from_bytes(data, index=0):
 
 
 def _rdata_from_bytes(data, start_index, end_index, a_type):
-    if a_type == RecordTypes.A.value:
+    if a_type ==1:
         data = data[start_index:end_index]
         return '{0}.{1}.{2}.{3}'.format(data[0], data[1], data[2], data[3])
-    elif a_type == RecordTypes.AAAA.value:
+    elif a_type == 28:
         data = data[start_index:end_index]
         return data
     else:
@@ -182,10 +171,10 @@ def _rdata_from_bytes(data, start_index, end_index, a_type):
 def _rdata_to_bytes(rdata, a_type):
     if rdata == '':
         return b''
-    if a_type == RecordTypes.A.value:
+    if a_type == 1:
         parts = rdata.split('.')
         return struct.pack('!BBBB', int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))
-    elif a_type == RecordTypes.AAAA.value:
+    elif a_type == 28:
         try:
             return bytes(rdata)
         except:
@@ -195,10 +184,10 @@ def _rdata_to_bytes(rdata, a_type):
 
 
 class Question:
-    def __init__(self, qname='', qtype=RecordTypes.A, qclass=RecordClasses.IN):
+    def __init__(self, qname='', qtype=1, qclass=1):
         self.qname = qname
-        self.qtype = qtype.value
-        self.qclass = qclass.value
+        self.qtype = qtype
+        self.qclass = qclass
 
     def __str__(self):
         return self.qname + ' ' + str(self.qtype) + ' ' + str(self.qclass)
@@ -238,10 +227,10 @@ class Question:
 
 
 class ResourceRecord:
-    def __init__(self, name='', type=RecordTypes.NS, rrclass=RecordClasses.IN, ttl=100, rdlength=0, rdata=''):
+    def __init__(self, name='', type=2, rrclass=1, ttl=100, rdlength=0, rdata=''):
         self.name = name
-        self.type = type.value
-        self.rr_class = rrclass.value
+        self.type = type
+        self.rr_class = rrclass
         self.ttl = ttl
         self.rdlength = rdlength
         self.rdata = rdata
