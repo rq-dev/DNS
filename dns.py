@@ -34,6 +34,7 @@ class Server:
                             answers.extend(dns_answer.answer_rrs)
                             authority.extend(dns_answer.authority_rrs)
                             additional.extend(dns_answer.additional_rrs)
+                            print('New cache record has been made!')
                             for answer in answers:
                                 cache.add(answer)
                             for answer in authority:
@@ -45,10 +46,11 @@ class Server:
                     else:
                         for answer in cached_rr:
                             answers.append(answer)
+                        print('Cache has been used!')
                 my_answer = new_response(request.header.id, request.questions, answers)
                 self.socket.sendto(my_answer.to_bytes(), addr)
                 cache.save()
-                print("Record: {" + str(answer) + "} has been sent!")
+                print("Response has been sent!")
 
 
 class Header:
@@ -419,7 +421,6 @@ class Cache:
                 'class': answer.rr_class,
                 'rdata': answer.rdata
             }))
-            print(answer.name + '' + answer.rr_class)
         else:
             self.storage[key_for_answer] = [json.dumps({
                 'deadline': time() + answer.ttl,
@@ -427,7 +428,6 @@ class Cache:
                 'class': answer.rr_class,
                 'rdata': answer.rdata
             })]
-            print(answer.name + '' + answer.rr_class)
 
     def find(self, name, rr_type, rr_class):
         key = json.dumps([name, rr_type, rr_class])
@@ -468,7 +468,7 @@ class Cache:
                 loaded = json.loads(rr)
                 if int(loaded['deadline']) < time():
                     rrs.remove(rr)
-                    print('Record: ' + str(loaded) + 'has been deleted!')
+                    print('Expired record has been deleted!')
         self.storage = {
             k: v for k, v in self.storage.items() if len(v) != 0
         }
