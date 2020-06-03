@@ -8,12 +8,12 @@ from time import time
 class Server:
     def __init__(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.bind(('127.0.0.1', 53))
 
     def start(self):
         print('\nServer has been started!\n')
         cache = Cache()
         cache.load()
-        self.socket.bind(('127.0.0.1', 53))
         while True:
             data, addr = self.socket.recvfrom(512)
             request = read_packet(data)
