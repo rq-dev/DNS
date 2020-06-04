@@ -476,7 +476,7 @@ class Cache:
 
 def main():
     global forwarder
-    forwarder = "8.8.8.8"
+    forwarder = "ns1.urfu.ru"
     server = Server()
     server.start()
 
